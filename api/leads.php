@@ -37,8 +37,12 @@ switch ($method) {
         break;
 
     case 'POST':
-        $csrf = sanitize($_POST['csrf_token'] ?? '');
+        // Support both JSON body and form POST
+        $jsonInput = json_decode(file_get_contents('php://input'), true) ?? [];
+        $postData  = array_merge($_POST, $jsonInput);
+        $csrf = sanitize($postData['csrf_token'] ?? '');
         if (!verifyCsrf($csrf)) jsonResponse(['success' => false, 'error' => 'Invalid request.'], 403);
+        $_POST = array_merge($_POST, $jsonInput); // merge so LeadService can read fields
 
         if ($action === 'import_csv') {
             if (empty($_FILES['csv_file'])) {
@@ -57,7 +61,7 @@ switch ($method) {
         }
 
         // Create lead
-        $result = LeadService::createLead($_POST);
+        $result = LeadService::createLead($postData);
         jsonResponse($result, $result['success'] ? 201 : 422);
         break;
 
