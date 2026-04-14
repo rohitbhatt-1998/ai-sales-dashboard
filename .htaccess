@@ -1,0 +1,59 @@
+# AI Sales Calling Assistant Dashboard
+# Apache .htaccess Configuration
+
+Options -Indexes
+Options -ExecCGI
+
+# Protect sensitive directories
+<FilesMatch "\.(sql|json|md|env|log|sh)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Protect includes and db directories
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /ai-sales-dashboard/
+
+    # Block direct access to includes/
+    RewriteRule ^includes/ - [F,L]
+    RewriteRule ^db/ - [F,L]
+    RewriteRule ^uploads/.*\.php$ - [F,L]
+
+    # Allow front-end routing
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+
+# Security headers
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# PHP settings (if allowed by host)
+<IfModule mod_php.c>
+    php_value upload_max_filesize 10M
+    php_value post_max_size 12M
+    php_value max_execution_time 120
+    php_value memory_limit 256M
+    php_flag display_errors Off
+    php_flag log_errors On
+</IfModule>
+
+# Gzip compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/css application/javascript text/html text/plain
+</IfModule>
+
+# Browser caching for static assets
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 week"
+    ExpiresByType application/javascript "access plus 1 week"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/jpeg "access plus 1 month"
+</IfModule>
