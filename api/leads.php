@@ -67,14 +67,31 @@ switch ($method) {
 
     case 'PUT':
         $id   = (int)($_GET['id'] ?? 0);
-        parse_str(file_get_contents('php://input'), $data);
+        $rawBody = file_get_contents('php://input');
+        $jsonData = json_decode($rawBody, true);
+        if (is_array($jsonData)) {
+            $data = $jsonData;
+        } else {
+            parse_str($rawBody, $data);
+        }
         if (!$id) jsonResponse(['success' => false, 'error' => 'ID required.'], 400);
+        $csrf = sanitize($data['csrf_token'] ?? '');
+        if (!verifyCsrf($csrf)) jsonResponse(['success' => false, 'error' => 'Invalid request.'], 403);
         jsonResponse(LeadService::updateLead($id, $data));
         break;
 
     case 'DELETE':
         $id = (int)($_GET['id'] ?? 0);
         if (!$id) jsonResponse(['success' => false, 'error' => 'ID required.'], 400);
+        $rawBody = file_get_contents('php://input');
+        $jsonData = json_decode($rawBody, true);
+        if (is_array($jsonData)) {
+            $data = $jsonData;
+        } else {
+            parse_str($rawBody, $data);
+        }
+        $csrf = sanitize($data['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''));
+        if (!verifyCsrf($csrf)) jsonResponse(['success' => false, 'error' => 'Invalid request.'], 403);
         $ok = LeadService::deleteLead($id);
         jsonResponse(['success' => $ok], $ok ? 200 : 404);
         break;
