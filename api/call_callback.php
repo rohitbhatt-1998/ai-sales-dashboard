@@ -25,7 +25,7 @@ $statusMap = [
     'failed'      => 'failed',
     'canceled'    => 'failed',
     'in-progress' => 'connected',
-    'queued'      => 'calling',
+    'queued'      => 'calling"
     'initiated'   => 'calling',
     'ringing'     => 'calling',
 ];
