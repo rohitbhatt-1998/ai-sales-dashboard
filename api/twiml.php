@@ -24,6 +24,7 @@ $voice = ($language === 'hinglish') ? 'Polly.Aditi' : 'Polly.Joanna';
 
 $questionLines = array_filter(array_map('trim', explode("\n", $questions)));
 $questionLines = array_values($questionLines);
+$nextUrl = BASE_URL . '/api/twiml.php?lead_id=' . $leadId . '&q=' . ($step + 1);
 
 // Persist previous Gather result into the transcript.
 $callSid = sanitize($_POST['CallSid'] ?? '');
@@ -46,6 +47,11 @@ if ($callSid && $speech && !empty($questionLines)) {
 ?>
 <?xml version="1.0" encoding="UTF-8"?>
 <Response>
+    <?php if (!$lead): ?>
+    <Say voice="<?= $voice ?>">Sorry, we could not find your call details.</Say>
+    <Hangup/>
+    <?php return; endif; ?>
+
     <?php if ($step === 0): ?>
     <Say voice="<?= $voice ?>"><?= htmlspecialchars($opening) ?></Say>
     <Pause length="1"/>
@@ -53,11 +59,11 @@ if ($callSid && $speech && !empty($questionLines)) {
 
     <?php if (!empty($questionLines) && isset($questionLines[$step])): ?>
     <Gather input="speech" timeout="4" speechTimeout="auto"
-            action="<?= BASE_URL ?>/api/twiml.php?lead_id=<?= $leadId ?>&q=<?= $step + 1 ?>"
+            action="<?= htmlspecialchars($nextUrl, ENT_QUOTES, 'UTF-8') ?>"
             method="POST">
         <Say voice="<?= $voice ?>"><?= htmlspecialchars($questionLines[$step]) ?></Say>
     </Gather>
-    <Redirect method="POST"><?= BASE_URL ?>/api/twiml.php?lead_id=<?= $leadId ?>&q=<?= $step + 1 ?></Redirect>
+    <Redirect method="POST"><?= htmlspecialchars($nextUrl, ENT_QUOTES, 'UTF-8') ?></Redirect>
     <?php else: ?>
     <Say voice="<?= $voice ?>"><?= htmlspecialchars($closing) ?></Say>
     <Hangup/>
