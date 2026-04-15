@@ -121,15 +121,16 @@ renderHead('AI Configuration');
                 <label class="form-label">AI Provider</label>
                 <select name="ai_provider" class="form-control" id="ai_provider">
                     <option value="mock">Mock (Demo Mode — no real calls)</option>
-                    <option value="openai">OpenAI (GPT-3.5 for transcription summary)</option>
+                    <option value="openrouter">OpenRouter (recommended)</option>
+                    <option value="cohere">Cohere</option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label class="form-label">OpenAI API Key</label>
+                <label class="form-label">Provider API Key</label>
                 <input type="password" name="ai_api_key" class="form-control" id="ai_api_key"
-                    placeholder="sk-…" autocomplete="off"/>
-                <div class="form-hint">Used for generating call summaries via GPT.</div>
+                    placeholder="Paste OpenRouter/Cohere key…" autocomplete="off"/>
+                <div class="form-hint">Used for generating transcript summaries (OpenRouter or Cohere).</div>
             </div>
 
             <hr style="border:none;border-top:1px solid var(--border);margin:20px 0"/>

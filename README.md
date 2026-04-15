@@ -11,7 +11,7 @@ A production-ready PHP web application for managing leads, triggering AI-based c
 | PHP  | 7.4+ (8.x recommended) |
 | MySQL / MariaDB | 5.7+ / 10.3+ |
 | Apache | 2.4+ with `mod_rewrite` enabled |
-| cURL | PHP extension (for Twilio / OpenAI) |
+| cURL | PHP extension (for Twilio / AI provider APIs) |
 | PDO | PHP extension (for database) |
 
 ---
@@ -144,11 +144,11 @@ Twilio Webhook URLs (configured automatically):
 - Status Callback: `https://yourdomain.com/ai-sales-dashboard/api/call_callback.php`
 - Transcription: `https://yourdomain.com/ai-sales-dashboard/api/transcribe_callback.php?lead_id=X`
 
-### OpenAI (AI Summaries)
+### AI Summaries (OpenRouter or Cohere)
 
-1. Get an [OpenAI API key](https://platform.openai.com/)
-2. In the app: **AI Config → Integrations → OpenAI API Key**
-3. Summaries will use GPT-3.5-turbo after each call
+1. Get an [OpenRouter API key](https://openrouter.ai/) or [Cohere API key](https://dashboard.cohere.com/api-keys).
+2. In the app: **AI Config → Integrations** choose provider and paste the key.
+3. Summaries are generated from the call transcript after callbacks are received.
 
 ---
 

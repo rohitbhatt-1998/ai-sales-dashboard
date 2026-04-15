@@ -109,8 +109,8 @@ class CallService {
         if ($twilioSid && $twilioToken && $twilioPhone) {
             $result = self::makeTwilioCall($lead, $callSid, $twilioSid, $twilioToken, $twilioPhone);
         } else {
-            // MOCK call simulation
-            $result = self::mockCall($lead, $logId);
+            // MOCK call simulation (asynchronous so logs don't complete instantly)
+            $result = self::mockCall($lead, $logId, $attempt);
         }
 
         return array_merge($result, ['log_id' => $logId, 'call_sid' => $callSid]);
@@ -122,6 +122,7 @@ class CallService {
     private static function makeTwilioCall(array $lead, string $callSid, string $sid, string $token, string $from): array {
         $to = formatPhone($lead['phone']);
         $twimlUrl = BASE_URL . '/api/twiml.php?lead_id=' . $lead['id'];
+        $log = DB::fetchOne('SELECT id FROM call_logs WHERE call_sid = ? ORDER BY id DESC LIMIT 1', [$callSid]);
 
         $postData = http_build_query([
             'To'     => $to,
@@ -129,6 +130,8 @@ class CallService {
             'Url'    => $twimlUrl,
             'Method' => 'POST',
             'StatusCallback' => BASE_URL . '/api/call_callback.php',
+            'StatusCallbackMethod' => 'POST',
+            'StatusCallbackEvent'  => 'initiated ringing answered completed',
         ]);
 
         $ch = curl_init("https://api.twilio.com/2010-04-01/Accounts/{$sid}/Calls.json");
@@ -146,10 +149,12 @@ class CallService {
         $data = json_decode($response, true);
 
         if ($httpCode === 201 && isset($data['sid'])) {
-            DB::execute(
-                'UPDATE call_logs SET call_sid = ?, status = "calling" WHERE id = ?',
-                [$data['sid'], DB::fetchOne('SELECT id FROM call_logs WHERE call_sid = ?', [$callSid])['id'] ?? 0]
-            );
+            if (!empty($log['id'])) {
+                DB::execute(
+                    'UPDATE call_logs SET call_sid = ?, status = "calling" WHERE id = ?',
+                    [$data['sid'], $log['id']]
+                );
+            }
             return ['success' => true, 'provider' => 'twilio', 'sid' => $data['sid']];
         }
 
@@ -160,7 +165,27 @@ class CallService {
     // -------------------------------------------------------
     // Mock call (when no Twilio configured) — simulates a call
     // -------------------------------------------------------
-    private static function mockCall(array $lead, int $logId): array {
+    private static function mockCall(array $lead, int $logId, int $attempt = 1): array {
+        // Respond immediately so UI sees an in-progress call first.
+        if (function_exists('session_write_close')) {
+            @session_write_close();
+        }
+
+        if (function_exists('ignore_user_abort')) {
+            @ignore_user_abort(true);
+        }
+
+        if (function_exists('fastcgi_finish_request')) {
+            @fastcgi_finish_request();
+        }
+
+        // Simulate a realistic call delay before finalizing.
+        sleep(rand(3, 7));
+
+        return self::finalizeMockCall($lead, $logId, $attempt);
+    }
+
+    private static function finalizeMockCall(array $lead, int $logId, int $attempt = 1): array {
         // Simulate random outcomes
         $outcomes = ['connected', 'no_answer', 'connected', 'connected', 'no_answer'];
         $outcome  = $outcomes[array_rand($outcomes)];
@@ -203,7 +228,7 @@ class CallService {
             [$newLeadStatus, self::scoreToInt($score), $retryIncrement, $lead['id']]
         );
 
-        return ['success' => true, 'provider' => 'mock', 'outcome' => $outcome, 'score' => $score];
+        return ['success' => true, 'provider' => 'mock', 'outcome' => $outcome, 'score' => $score, 'attempt' => $attempt];
     }
 
     // -------------------------------------------------------
