@@ -124,15 +124,20 @@ class CallService {
         $twimlUrl = BASE_URL . '/api/twiml.php?lead_id=' . $lead['id'];
         $log = DB::fetchOne('SELECT id FROM call_logs WHERE call_sid = ? ORDER BY id DESC LIMIT 1', [$callSid]);
 
-        $postData = http_build_query([
+        $payload = [
             'To'     => $to,
             'From'   => $from,
             'Url'    => $twimlUrl,
             'Method' => 'POST',
             'StatusCallback' => BASE_URL . '/api/call_callback.php',
             'StatusCallbackMethod' => 'POST',
-            'StatusCallbackEvent'  => 'initiated ringing answered completed',
-        ]);
+        ];
+        // Twilio expects repeated StatusCallbackEvent keys (not one space-separated string).
+        $postData = http_build_query($payload)
+            . '&StatusCallbackEvent=initiated'
+            . '&StatusCallbackEvent=ringing'
+            . '&StatusCallbackEvent=answered'
+            . '&StatusCallbackEvent=completed';
 
         $ch = curl_init("https://api.twilio.com/2010-04-01/Accounts/{$sid}/Calls.json");
         curl_setopt_array($ch, [
