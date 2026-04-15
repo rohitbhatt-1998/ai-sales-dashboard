@@ -6,43 +6,54 @@ require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/helpers.php';
 
-$leadId = (int)($_GET['lead_id'] ?? 0);
-$step   = max(0, (int)($_GET['q'] ?? 0));
-$lead   = DB::fetchOne('SELECT * FROM leads WHERE id = ?', [$leadId]);
-
 header('Content-Type: text/xml');
 
-$opening   = DB::getConfig('opening_script', 'Hello, this is an AI assistant calling.');
-$closing   = DB::getConfig('closing_statement', 'Thank you for your time!');
-$language  = DB::getConfig('language_style', 'english');
-$questions = DB::getConfig('question_flow', '');
+try {
+    $leadId = (int)($_GET['lead_id'] ?? 0);
+    $step   = max(0, (int)($_GET['q'] ?? 0));
+    $lead   = DB::fetchOne('SELECT * FROM leads WHERE id = ?', [$leadId]);
 
-$opening = str_replace('{{lead_name}}', $lead['name'] ?? 'there', $opening);
-$closing = str_replace('{{lead_name}}', $lead['name'] ?? 'there', $closing);
+    $opening   = DB::getConfig('opening_script', 'Hello, this is an AI assistant calling.');
+    $closing   = DB::getConfig('closing_statement', 'Thank you for your time!');
+    $language  = DB::getConfig('language_style', 'english');
+    $questions = DB::getConfig('question_flow', '');
 
-$voice = ($language === 'hinglish') ? 'Polly.Aditi' : 'Polly.Joanna';
+    $opening = str_replace('{{lead_name}}', $lead['name'] ?? 'there', $opening);
+    $closing = str_replace('{{lead_name}}', $lead['name'] ?? 'there', $closing);
 
-$questionLines = array_filter(array_map('trim', explode("\n", $questions)));
-$questionLines = array_values($questionLines);
-$nextUrl = BASE_URL . '/api/twiml.php?lead_id=' . $leadId . '&q=' . ($step + 1);
+    $voice = ($language === 'hinglish') ? 'Polly.Aditi' : 'Polly.Joanna';
 
-// Persist previous Gather result into the transcript.
-$callSid = sanitize($_POST['CallSid'] ?? '');
-$speech  = sanitize($_POST['SpeechResult'] ?? '');
-if ($callSid && $speech && !empty($questionLines)) {
-    $previousIndex = max(0, $step - 1);
-    $askedQuestion = $questionLines[$previousIndex] ?? 'Question';
-    $append = "AI: {$askedQuestion}\nLead: {$speech}\n";
+    $questionLines = array_filter(array_map('trim', explode("\n", $questions)));
+    $questionLines = array_values($questionLines);
+    $nextUrl = BASE_URL . '/api/twiml.php?lead_id=' . $leadId . '&q=' . ($step + 1);
 
-    $log = DB::fetchOne('SELECT id, transcript FROM call_logs WHERE call_sid = ? ORDER BY id DESC LIMIT 1', [$callSid]);
-    if ($log) {
-        $existing = trim((string)($log['transcript'] ?? ''));
-        $fullTranscript = trim($existing . "\n" . $append);
-        DB::execute(
-            'UPDATE call_logs SET transcript = ?, status = "connected" WHERE id = ?',
-            [$fullTranscript, $log['id']]
-        );
+    // Persist previous Gather result into the transcript.
+    $callSid = sanitize($_POST['CallSid'] ?? '');
+    $speech  = sanitize($_POST['SpeechResult'] ?? '');
+    if ($callSid && $speech && !empty($questionLines)) {
+        $previousIndex = max(0, $step - 1);
+        $askedQuestion = $questionLines[$previousIndex] ?? 'Question';
+        $append = "AI: {$askedQuestion}\nLead: {$speech}\n";
+
+        $log = DB::fetchOne('SELECT id, transcript FROM call_logs WHERE call_sid = ? ORDER BY id DESC LIMIT 1', [$callSid]);
+        if ($log) {
+            $existing = trim((string)($log['transcript'] ?? ''));
+            $fullTranscript = trim($existing . "\n" . $append);
+            DB::execute(
+                'UPDATE call_logs SET transcript = ?, status = "connected" WHERE id = ?',
+                [$fullTranscript, $log['id']]
+            );
+        }
     }
+} catch (Throwable $e) {
+    error_log('twiml error: ' . $e->getMessage());
+    $lead = null;
+    $step = 0;
+    $voice = 'Polly.Joanna';
+    $opening = 'Hello, this is an AI assistant.';
+    $closing = 'Thank you for your time.';
+    $questionLines = [];
+    $nextUrl = BASE_URL . '/api/twiml.php';
 }
 ?>
 <?xml version="1.0" encoding="UTF-8"?>
