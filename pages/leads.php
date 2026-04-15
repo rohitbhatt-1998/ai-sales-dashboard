@@ -287,8 +287,8 @@ async function submitLeadForm(id = null) {
     if (id) {
         const resp = await fetch(`${BASE_URL}/api/leads.php?id=${id}`, {
             method: 'PUT',
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: new URLSearchParams(payload)
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
         });
         res = await resp.json();
     } else {
@@ -314,7 +314,11 @@ async function submitLeadForm(id = null) {
 // ---- Delete Lead ----
 async function deleteLead(id, name) {
     if (!confirm(`Delete lead "${name}"? This will also remove all call logs.`)) return;
-    const res = await fetch(`${BASE_URL}/api/leads.php?id=${id}`, { method: 'DELETE' });
+    const res = await fetch(`${BASE_URL}/api/leads.php?id=${id}`, {
+        method: 'DELETE',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ csrf_token: CSRF_TOKEN })
+    });
     const data = await res.json();
     if (data.success) {
         toast('Lead deleted.', 'success');
@@ -411,9 +415,16 @@ async function callLead(leadId, name) {
     try {
         const res = await apiPost(`${BASE_URL}/api/calls.php?action=single`, { lead_id: leadId });
         if (res.success) {
-            bar.className = 'call-status-bar ' + (res.outcome === 'connected' ? 'completed' : 'failed');
-            bar.innerHTML = `✅ Call to ${escHtml(name)} completed. Outcome: <strong>${res.outcome}</strong>. Score: <strong>${res.score || '—'}</strong>`;
-            toast('Call completed for ' + name, 'success');
+            const provider = res.provider || 'system';
+            if (provider === 'twilio') {
+                bar.className = 'call-status-bar connected';
+                bar.innerHTML = `✅ Call to ${escHtml(name)} started via Twilio. Status will update from callbacks shortly.`;
+                toast('Call started for ' + name, 'success');
+            } else {
+                bar.className = 'call-status-bar ' + (res.outcome === 'connected' ? 'completed' : 'failed');
+                bar.innerHTML = `✅ Call to ${escHtml(name)} completed. Outcome: <strong>${res.outcome}</strong>. Score: <strong>${res.score || '—'}</strong>`;
+                toast('Call completed for ' + name, 'success');
+            }
             setTimeout(() => location.reload(), 3000);
         } else {
             bar.className = 'call-status-bar failed';

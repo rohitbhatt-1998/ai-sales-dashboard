@@ -106,7 +106,7 @@ INSERT INTO `ai_config` (`config_key`, `config_value`) VALUES
 ('closing_statement', 'Thank you for your time {{lead_name}}! Our representative will follow up with you shortly. Have a great day!'),
 ('max_retries', '2'),
 ('call_delay_seconds', '5'),
-('ai_provider', 'openai'),
+('ai_provider', 'openrouter'),
 ('ai_api_key', ''),
 ('twilio_account_sid', ''),
 ('twilio_auth_token', ''),
