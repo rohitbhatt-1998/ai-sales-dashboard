@@ -11,7 +11,7 @@ $leadId      = (int)($_GET['lead_id'] ?? 0);
 $callSid     = sanitize($_POST['CallSid'] ?? '');
 $transcript  = sanitize($_POST['TranscriptionText'] ?? '');
 
-if (!$callSid || !$transcript) {
+if (!$callSid) {
     http_response_code(200);
     exit;
 }
@@ -26,20 +26,31 @@ if (!$lead) {
 $score   = classifyLeadScore($transcript);
 $summary = '';
 
-// Try OpenAI summary if configured
+// Fallback to existing transcript from call log when TwiML <Gather> built it incrementally.
+$log = DB::fetchOne('SELECT id, transcript FROM call_logs WHERE call_sid = ? ORDER BY id DESC LIMIT 1', [$callSid]);
+if (!$transcript && $log) {
+    $transcript = trim((string)$log['transcript']);
+}
+
+if (!$transcript) {
+    http_response_code(200);
+    exit;
+}
+
+// Try AI summary if configured
 $apiKey = DB::getConfig('ai_api_key');
+$provider = strtolower(DB::getConfig('ai_provider', 'mock'));
 if ($apiKey) {
-    $summary = generateAiSummary($transcript, $lead['name'], $apiKey);
+    $summary = generateAiSummary($transcript, $lead['name'], $apiKey, $provider);
 }
 if (!$summary) {
     $summary = generateMockSummary($transcript, $lead['name']);
 }
 
 // Update call log
-$log = DB::fetchOne('SELECT id FROM call_logs WHERE call_sid = ? ORDER BY id DESC LIMIT 1', [$callSid]);
 if ($log) {
     DB::execute(
-        'UPDATE call_logs SET transcript = ?, summary = ?, lead_score = ? WHERE id = ?',
+        'UPDATE call_logs SET transcript = ?, summary = ?, lead_score = ?, status = CASE WHEN status = "calling" THEN "connected" ELSE status END WHERE id = ?',
         [$transcript, $summary, $score, $log['id']]
     );
 }
@@ -54,36 +65,59 @@ http_response_code(200);
 exit;
 
 // -------------------------------------------------------
-// OpenAI Summary Generator
+// AI Summary Generator (OpenRouter/Cohere)
 // -------------------------------------------------------
-function generateAiSummary(string $transcript, string $leadName, string $apiKey): string {
+function generateAiSummary(string $transcript, string $leadName, string $apiKey, string $provider = 'mock'): string {
     $prompt = "You are a sales AI assistant. Analyze this call transcript and provide a brief 2-sentence summary of the call outcome and next recommended action for lead '{$leadName}'.\n\nTranscript:\n{$transcript}";
 
-    $payload = json_encode([
-        'model' => 'gpt-3.5-turbo',
-        'messages' => [
-            ['role' => 'system', 'content' => 'You are a sales call analysis assistant.'],
-            ['role' => 'user',   'content' => $prompt],
-        ],
-        'max_tokens' => 150,
-        'temperature' => 0.5,
-    ]);
+    $endpoint = '';
+    $headers = ['Content-Type: application/json'];
+    $payload = [];
 
-    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    if ($provider === 'cohere') {
+        $endpoint = 'https://api.cohere.com/v2/chat';
+        $headers[] = 'Authorization: Bearer ' . $apiKey;
+        $payload = [
+            'model' => 'command-r-plus',
+            'messages' => [
+                ['role' => 'system', 'content' => 'You are a sales call analysis assistant.'],
+                ['role' => 'user', 'content' => $prompt],
+            ],
+            'temperature' => 0.4,
+            'max_tokens' => 150,
+        ];
+    } else {
+        // OpenRouter (OpenAI-compatible endpoint)
+        $endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+        $headers[] = 'Authorization: Bearer ' . $apiKey;
+        $headers[] = 'HTTP-Referer: ' . BASE_URL;
+        $headers[] = 'X-Title: AI Sales Dashboard';
+        $payload = [
+            'model' => 'openai/gpt-4o-mini',
+            'messages' => [
+                ['role' => 'system', 'content' => 'You are a sales call analysis assistant.'],
+                ['role' => 'user',   'content' => $prompt],
+            ],
+            'max_tokens' => 150,
+            'temperature' => 0.5,
+        ];
+    }
+
+    $ch = curl_init($endpoint);
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $payload,
+        CURLOPT_POSTFIELDS     => json_encode($payload),
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 15,
-        CURLOPT_HTTPHEADER     => [
-            'Authorization: Bearer ' . $apiKey,
-            'Content-Type: application/json',
-        ],
+        CURLOPT_HTTPHEADER     => $headers,
     ]);
 
     $response = curl_exec($ch);
     curl_close($ch);
 
-    $data = json_decode($response, true);
+    $data = json_decode((string)$response, true);
+    if ($provider === 'cohere') {
+        return $data['message']['content'][0]['text'] ?? '';
+    }
     return $data['choices'][0]['message']['content'] ?? '';
 }
